@@ -1,0 +1,364 @@
+---
+title: "402 final project"
+author: "Sungjin Choi (Jason), Zhixian Wang (Zach), Alysa Juarez, Kathy Mo, Ashwin Ramaseshan"
+format: pdf
+editor: visual
+editor_options: 
+  chunk_output_type: console
+---
+
+# 402 final project
+
+### loading dataset
+
+```{r}
+student_lifestyle<- read.csv("student_lifestyle_dataset.csv")
+
+
+```
+
+### recoding data
+
+**Recoding GPA:**
+
+High: greater than or equal to 3.5
+
+Average: greater than or equal to 2.5 and less than 3.5
+
+Low: less than 2.5
+
+**Recoding Sleep Hours:**
+
+High: greater than or equal to 6
+
+Low: less than 6
+
+```{r}
+# recode into categories
+library(dplyr)
+student_lifestyle <- student_lifestyle |>
+  mutate(GPA = case_when(
+    GPA >= 3.5 ~ "High",
+    GPA >= 2.5 & GPA < 3.5 ~ "Average",
+    GPA < 2.5 ~ "Low"))
+
+student_lifestyle <- student_lifestyle |>
+  mutate(Sleep_Hours_Per_Day = case_when(
+    Sleep_Hours_Per_Day >= 6 ~ "High",
+    Sleep_Hours_Per_Day < 6 ~ "Low"))
+```
+
+```{r}
+student_lifestyle$GPA <- as.factor(student_lifestyle$GPA)
+student_lifestyle$Sleep_Hours_Per_Day <- as.factor(student_lifestyle$Sleep_Hours_Per_Day)
+student_lifestyle$Stress_Level <- as.factor(student_lifestyle$Stress_Level)
+
+student_lifestyle$GPA <- factor(student_lifestyle$GPA,
+                                levels = c("Low", "Average", "High"), 
+                                ordered = TRUE)
+
+
+student_lifestyle$Sleep_Hours_Per_Day <- factor(student_lifestyle$Sleep_Hours_Per_Day,
+                                levels = c("Low", "High"), 
+                                ordered = TRUE)
+
+
+student_lifestyle$Stress_Level <- factor(student_lifestyle$Stress_Level,
+                                levels = c("Low", "Moderate", "High"), 
+                                ordered = TRUE)
+```
+
+```{r}
+table(student_lifestyle$GPA)
+table(student_lifestyle$Sleep_Hours_Per_Day)
+table(student_lifestyle$Stress_Level)
+```
+
+```{r}
+ftable(tab1<-xtabs(~GPA+Sleep_Hours_Per_Day+Stress_Level,data=student_lifestyle))
+```
+
+```{r}
+(student_lifestyle1 <- data.frame(tab1))
+```
+
+### loading libraries
+
+```{r}
+library(car)
+library(dplyr)
+library(ggplot2)
+library(emmeans)
+library(caret)
+library(reshape2)
+library(corrplot)
+library(nnet)
+```
+
+```{r}
+summary(student_lifestyle)
+```
+
+## eda
+
+```{r}
+numeric_data <- student_lifestyle %>% select(Study_Hours_Per_Day,
+                                             Extracurricular_Hours_Per_Day,
+                                             Social_Hours_Per_Day,
+                                             Physical_Activity_Hours_Per_Day)
+
+cor_matrix <- cor(numeric_data, use = "complete.obs")
+
+corrplot(cor_matrix, method = "color", type = "upper", tl.col = "black",
+        tl.srt = 50, title = "Correlation Heatmap of Lifestyle Variables")
+```
+
+```{r}
+par(mfrow = c(2, 3))
+
+hist(student_lifestyle$Study_Hours_Per_Day, main = "Study Hours",
+     xlab = "Hours", col = "skyblue", border = "black")
+
+hist(student_lifestyle$Extracurricular_Hours_Per_Day, main = "Extracurricular Hours", xlab = "Hours", col = "lightgreen", border = "black")
+
+
+hist(student_lifestyle$Social_Hours_Per_Day, main = "Social Hours",
+     xlab = "Hours", col = "lightpink", border = "black")
+
+hist(student_lifestyle$Physical_Activity_Hours_Per_Day, main = "Physical Activity Hours", xlab = "Hours", col = "lightcoral", border = "black")
+
+```
+
+```{r}
+symbox(~Physical_Activity_Hours_Per_Day, data = student_lifestyle,
+       powers = c(-2, -1, -0.5, 0, 0.5, 1, 2),
+       main = "Symmetry Plot for Home Prices (Yi)")
+```
+
+```{r}
+symbox(~Social_Hours_Per_Day, data = student_lifestyle,
+       powers = c(-2, -1, -0.5, 0, 0.5, 1, 2),
+       main = "Symmetry Plot for Home Prices (Yi)")
+```
+
+```{r}
+student_lifestyle$Sqrt_Physical_Activity_Hours_Per_Day <-
+  sqrt(student_lifestyle$Physical_Activity_Hours_Per_Day + 1)
+
+student_lifestyle$Log_Social_Hours_Per_Day <-
+  log(student_lifestyle$Social_Hours_Per_Day + 1)
+```
+
+```{r}
+hist(student_lifestyle$Sqrt_Physical_Activity_Hours_Per_Day, main = "Physical Activity Hours", xlab = "Hours", col = "lightcoral", border = "black")
+
+hist(student_lifestyle$Log_Social_Hours_Per_Day, main = "Log Transformed Social Hours", xlab = "Log(Social Hours + 1)", col = "skyblue", border = "black")
+```
+
+```{r}
+
+#CONTINGENCY TABLE
+
+contingency_table <- table(student_lifestyle$Stress_Level,
+                           student_lifestyle$Sleep_Hours_Per_Day)
+print(contingency_table)
+
+chi_square_test <- chisq.test(contingency_table)
+print(chi_square_test)
+
+```
+
+## creating the models
+
+### model one
+
+```{r}
+# model one, interaction between stress level and study hours per day
+
+model1 <- multinom(data = student_lifestyle,
+                   GPA ~ Log_Social_Hours_Per_Day +
+                     Extracurricular_Hours_Per_Day +
+                     Sleep_Hours_Per_Day +
+                     Stress_Level * Study_Hours_Per_Day)
+
+summary(model1, Wald.ratios =TRUE)
+```
+
+```{r}
+# z & p values 
+z <- summary(model1)$coefficients / summary(model1)$standard.errors
+p <- (1 - pnorm(abs(z), 0, 1))*2
+
+z
+p
+```
+
+### model two
+
+```{r}
+#model two, less variables 
+
+model2 <- multinom(data = student_lifestyle,
+                   GPA ~ Sleep_Hours_Per_Day +
+                     Stress_Level * Study_Hours_Per_Day)
+
+summary(model2, Wald.ratios =TRUE)
+```
+
+```{r}
+# z & p values 
+z2 <- summary(model2)$coefficients / summary(model2)$standard.errors
+p2 <- (1 - pnorm(abs(z2), 0, 1))*2
+
+z2
+p2
+```
+
+### model three
+
+```{r}
+model3 <- multinom(data = student_lifestyle,
+                   GPA ~ Sleep_Hours_Per_Day +
+                     Stress_Level + Study_Hours_Per_Day)
+
+summary(model3, Wald.ratios =TRUE)
+```
+
+```{r}
+# z & p values 
+z3 <- summary(model3)$coefficients / summary(model3)$standard.errors
+p3 <- (1 - pnorm(abs(z3), 0, 1))*2
+
+z3
+p3
+```
+
+### model four
+
+```{r}
+model4 <- multinom(data = student_lifestyle,
+                   GPA ~ Study_Hours_Per_Day +
+                     Stress_Level * Sleep_Hours_Per_Day)
+
+summary(model4, Wald.ratios =TRUE)
+```
+
+```{r}
+z4 <- summary(model4)$coefficients / summary(model4)$standard.errors
+p4 <- (1 - pnorm(abs(z4), 0, 1))*2
+
+z4
+```
+
+Practical significance or strength of the final model
+
+```{r}
+library(caret)
+#Cross Validation
+
+ctrl <- trainControl(method = "cv", number = 10)
+
+
+cv_model <- train(
+  GPA ~ Log_Social_Hours_Per_Day + Extracurricular_Hours_Per_Day + Sleep_Hours_Per_Day +
+    Stress_Level * Study_Hours_Per_Day,
+  data = student_lifestyle,
+  method = "multinom",
+  trControl = ctrl,
+  trace = FALSE
+
+
+
+)
+print(cv_model$results)
+
+```
+
+```{r}
+#Confusion Matrix
+
+predictions <- predict(cv_model, student_lifestyle)
+
+#confusion matrix
+conf_matrix <- confusionMatrix(predictions, student_lifestyle$GPA)
+print(conf_matrix)
+
+```
+
+MSE
+
+```{r}
+#calculating MSE
+
+
+probs <- predict(model1, type = "probs")
+predicted <- colnames(probs)[apply(probs, 1, which.max)]
+
+actual <- as.numeric(factor(student_lifestyle$GPA, levels = c("Low", "Average", "High")))
+predicted_numeric <- as.numeric(factor(predicted, levels = c("Low", "Average", "High")))
+
+# Calculate MSE
+mse <- mean((actual - predicted_numeric)^2)
+print(mse)
+```
+
+ROC Curve
+
+```{r}
+library(pROC)
+
+binary_actual <- ifelse(student_lifestyle$GPA == "High", 1, 0)
+binary_probs <- probs[, "High"]
+
+# Plot ROC curve
+roc_curve <- roc(binary_actual, binary_probs)
+plot(roc_curve)
+auc(roc_curve)
+```
+
+Adjusted R Sqaured
+
+```{r}
+
+
+null_model <- multinom(data = student_lifestyle, GPA ~ 1)
+
+null_deviance <- null_model$deviance
+
+
+residual_deviance <- model1$deviance
+
+# Calculate Adjusted R-squared
+adjusted_r2 <- 1 - (residual_deviance / null_deviance)
+
+
+print(adjusted_r2)
+
+```
+
+```{r}
+# Calculate McFadden's R-squared
+null_model <- multinom(data = student_lifestyle, GPA ~ 1) # Null model with no predictors
+null_deviance <- null_model$deviance                    # Null deviance
+residual_deviance <- model1$deviance                    # Residual deviance from the fitted model
+
+# McFadden's R-squared formula
+mcfadden_r2 <- 1 - (residual_deviance / null_deviance)
+print(mcfadden_r2)
+
+```
+
+```         
+```
+
+```         
+```
+
+```         
+```
+
+```         
+```
+
+```{p4}
+```
